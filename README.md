@@ -1,6 +1,6 @@
 # COVID-19 certificate generator
 
-A CLI to generate a certificate when going out in France during the COVID-19 pandemic.
+A CLI to generate certificates when going out in France during the COVID-19 pandemic.
 
 Filling web forms might be boring (especially for developers!!) when going outside during the pandemic by using the [official website](https://media.interieur.gouv.fr/deplacement-covid-19/). This CLI will provide you with your certificate (aka, ATTESTATION DE DÉPLACEMENT DÉROGATOIRE) in one click! However, once generated, you have to figure out how to copy to your mobile device :D
 
@@ -20,38 +20,42 @@ npm i
 
 ## Generate the certificate
 
-First, the [profile.json](profile.json) has to be filled with the required information.
+First, the [profiles.json](profiles.json) has to be filled with the required information for profile.
 ```json
-{
-  "lastname": "Times",
-  "firstname": "Vincent",
-  "birthday": "30/02/2000",
-  "lieunaissance": "Namportou",
-  "address": "1 rue du grand rue",
-  "zipcode": "99000",
-  "town": "Mille ans"
-}
+[
+    {
+      "lastname": "Times",
+      "firstname": "Vincent",
+      "birthday": "30/02/2000",
+      "placeofbirth": "Namportou",
+      "address": "1 rue du grand rue",
+      "zipcode": "99000",
+      "city": "Mille ans",
+      "email": "vincent.times@mail.com"
+    },
+    ...
+]
 ```
 
 Then, simply run the script while specifying the reason for going out:
 ```sh
-node certificate.js 'sport'
+node certificate.js sport_animaux ./profiles
 ```
 
 The current date and time will be used by default, however, they could be also specified:
 ```sh
-node certificate.js 'sport' --time="17h00"
-node certificate.js 'sport' --time="05h55" --date="20/02/2020"
+node certificate.js --time="17h00" sport_animaux ./profiles
+node certificate.js --time="05h55" --date="20/02/2020"  sport_animaux ./profiles
 ```
 
 Multiple reasons can be included separated by a dash `'-'` (or any other character, or even NULL):
 ```sh
-node certificate.js 'courses-sport' --time="17h00"
+node certificate.js --time="17h00" achat-sport_animaux ./profiles
 ```
 
-With custom profile and output files:
+With output files:
 ```sh
-node certificate.js 'famille' --profile=my-grandma-profile.json --output=attestation-grandma.pdf
+node certificate.js  --output=attestation-grandma.pdf famille ./profiles.json
 ```
 
 Show help message and possible reasons

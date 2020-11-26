@@ -1,0 +1,20 @@
+[
+  {
+    "lastname": "Times",
+    "firstname": "Vincent",
+    "birthday": "30/02/2000",
+    "placeofbirth": "Namportou",
+    "address": "1 rue du grand rue",
+    "zipcode": "99000",
+    "city": "Mille ans"
+  },
+  {
+    "lastname": "Doe",
+    "firstname": "John",
+    "birthday": "30/02/1958",
+    "placeofbirth": "Namportou",
+    "address": "1 rue du grand rue",
+    "zipcode": "99000",
+    "city": "Mille ans"
+  }
+]

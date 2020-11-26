@@ -1,0 +1,10 @@
+version: '2'
+
+services:
+  gen:
+    build: docker/
+    volumes:
+      - ./:/data
+    environment:
+      - REASONS=${REASONS:-sport_animaux}
+      - PROFILES_PATH=${PROFILES_PATH:-./profiles.json}

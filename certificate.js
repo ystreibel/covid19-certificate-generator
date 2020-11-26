@@ -2,7 +2,7 @@
 
 doc = `
 Usage:
-  certificate.js <reasons> [--time=<time>] [--date=<date>] [--profile=<path>] [--output=<path>]
+  certificate.js [--time=<time>] [--date=<date>] [--config=<path>] [--output=<path>] <reasons> <profiles>  
   certificate.js -h | --help | --version
 
 Options:
@@ -10,31 +10,36 @@ Options:
   --version         Show version.
   --time=<time>     Going out time, foramt: HHhMM
   --date=<date>     Going out date, format: dd/mm/yyyy
-  --profile=<path>  The path to the profile file.
+  --config=<path>   The path to the config file.
   --output=<path>   The output path of the certificate.
+
+The profiles argument is the path to the json file that contains array of profile.
 
 Possible reasons:
   - travail
-  - courses
+  - achats
   - sante
   - famille
-  - sport
-  - judiciaire
+  - handicap
+  - sport_animaux
+  - convocation
   - missions
+  - enfants
 `
 
 'use strict'
 
+const config = require('config');
 const QRCode = require('qrcode')
 const fs = require('fs')
 const PDFLib = require('pdf-lib')
 const {docopt} = require('docopt')
+const nodemailer = require('nodemailer')
+const path = require('path')
 
 const PDFDocument = PDFLib.PDFDocument
 
 const attestationInputPath = './data/certificate.pdf'
-
-
 
 const generateQR = async text => {
   try {
@@ -67,35 +72,78 @@ function formatTime(date) {
   return `${hour}h${minute}`
 }
 
-function idealFontSize(font, text, maxWidth, minSize, defaultSize) {
+function getIdealFontSize (font, text, maxWidth, minSize, defaultSize) {
   let currentSize = defaultSize
   let textWidth = font.widthOfTextAtSize(text, defaultSize)
+
   while (textWidth > maxWidth && currentSize > minSize) {
     textWidth = font.widthOfTextAtSize(text, --currentSize)
   }
-  return (textWidth > maxWidth) ? null : currentSize
+
+  return textWidth > maxWidth ? null : currentSize
 }
 
-async function generatePdf(existingPdfBytes, profile, reasons) {
-  const generatedDate = new Date()
-  const creationDate = formatDate(generatedDate)
-  const creationHour = formatTime(generatedDate)
+const ys = {
+  travail: 578,
+  achats: 533,
+  sante: 477,
+  famille: 435,
+  handicap: 396,
+  sport_animaux: 358,
+  convocation: 295,
+  missions: 255,
+  enfants: 211,
+}
 
-  const { lastname, firstname, birthday, lieunaissance, address, zipcode, town, datesortie, heuresortie } = profile
-  const releaseHours = String(heuresortie).substring(0, 2)
-  const releaseMinutes = String(heuresortie).substring(3, 5)
+async function generatePdf(profile, reasons, pdfBase) {
+  const creationInstant = new Date()
+  const creationDate = creationInstant.toLocaleDateString('fr-FR')
+  const creationHour = creationInstant
+      .toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+      .replace(':', 'h')
+
+  const {
+    lastname,
+    firstname,
+    birthday,
+    placeofbirth,
+    address,
+    zipcode,
+    city,
+    datesortie,
+    heuresortie,
+  } = profile
 
   const data = [
     `Cree le: ${creationDate} a ${creationHour}`,
     `Nom: ${lastname}`,
     `Prenom: ${firstname}`,
-    `Naissance: ${birthday} a ${lieunaissance}`,
-    `Adresse: ${address} ${zipcode} ${town}`,
-    `Sortie: ${datesortie} a ${releaseHours}h${releaseMinutes}`,
+    `Naissance: ${birthday} a ${placeofbirth}`,
+    `Adresse: ${address} ${zipcode} ${city}`,
+    `Sortie: ${datesortie} a ${heuresortie}`,
     `Motifs: ${reasons}`,
-  ].join(' ')
+  ].join(';\n ')
+
+  const existingPdfBytes = fs.readFileSync(pdfBase)
 
   const pdfDoc = await PDFDocument.load(existingPdfBytes)
+
+  // set pdf metadata
+  pdfDoc.setTitle('COVID-19 - Déclaration de déplacement')
+  pdfDoc.setSubject('Attestation de déplacement dérogatoire')
+  pdfDoc.setKeywords([
+    'covid19',
+    'covid-19',
+    'attestation',
+    'déclaration',
+    'déplacement',
+    'officielle',
+    'gouvernement',
+  ])
+  pdfDoc.setProducer('DNUM/SDIT')
+  pdfDoc.setCreator('')
+  pdfDoc.setAuthor("Ministère de l'intérieur")
+
   const page1 = pdfDoc.getPages()[0]
 
   const font = await pdfDoc.embedFont(PDFLib.StandardFonts.Helvetica)
@@ -103,33 +151,18 @@ async function generatePdf(existingPdfBytes, profile, reasons) {
     page1.drawText(text, { x, y, size, font })
   }
 
-  drawText(`${firstname} ${lastname}`, 123, 686)
-  drawText(birthday, 123, 661)
-  drawText(lieunaissance, 92, 638)
-  drawText(`${address} ${zipcode} ${town}`, 134, 613)
+  drawText(`${firstname} ${lastname}`, 119, 696)
+  drawText(birthday, 119, 674)
+  drawText(placeofbirth, 297, 674)
+  drawText(`${address} ${zipcode} ${city}`, 133, 652)
 
-  if (reasons.includes('travail')) {
-    drawText('x', 76, 527, 19)
-  }
-  if (reasons.includes('courses')) {
-    drawText('x', 76, 478, 19)
-  }
-  if (reasons.includes('sante')) {
-    drawText('x', 76, 436, 19)
-  }
-  if (reasons.includes('famille')) {
-    drawText('x', 76, 400, 19)
-  }
-  if (reasons.includes('sport')) {
-    drawText('x', 76, 345, 19)
-  }
-  if (reasons.includes('judiciaire')) {
-    drawText('x', 76, 298, 19)
-  }
-  if (reasons.includes('missions')) {
-    drawText('x', 76, 260, 19)
-  }
-  let locationSize = idealFontSize(font, profile.town, 83, 7, 11)
+  reasons
+      .split(', ')
+      .forEach(reason => {
+        drawText('x', 78, ys[reason], 18)
+      })
+
+  let locationSize = getIdealFontSize(font, profile.city, 83, 7, 11)
 
   if (!locationSize) {
     console.warn('Le nom de la ville risque de ne pas être affiché correctement en raison de sa longueur. ' +
@@ -137,32 +170,23 @@ async function generatePdf(existingPdfBytes, profile, reasons) {
     locationSize = 7
   }
 
-  drawText(profile.town, 111, 226, locationSize)
-
-  if (reasons !== '') {
-    // Date sortie
-    drawText(`${profile.datesortie}`, 92, 200)
-    drawText(releaseHours, 200, 201)
-    drawText(releaseMinutes, 220, 201)
-  }
-
-  // Date création
-  drawText('Date de création:', 464, 150, 7)
-  drawText(`${creationDate} à ${creationHour}`, 455, 144, 7)
+  drawText(profile.city, 105, 177, locationSize)
+  drawText(`${profile.datesortie}`, 91, 153, 11)
+  drawText(`${profile.heuresortie}`, 264, 153, 11)
 
   const generatedQR = await generateQR(data)
 
   const qrImage = await pdfDoc.embedPng(generatedQR)
 
   page1.drawImage(qrImage, {
-    x: page1.getWidth() - 170,
-    y: 155,
-    width: 100,
-    height: 100,
+    x: page1.getWidth() - 156,
+    y: 100,
+    width: 92,
+    height: 92,
   })
 
   pdfDoc.addPage()
-  const page2 = await pdfDoc.getPages()[1]
+  const page2 = pdfDoc.getPages()[1]
   page2.drawImage(qrImage, {
     x: 50,
     y: page2.getHeight() - 350,
@@ -173,34 +197,56 @@ async function generatePdf(existingPdfBytes, profile, reasons) {
   return await pdfDoc.save()
 }
 
-
 async function main(arguments) {
   try {
     const now = new Date()
     const todayDate = formatDate(now)
     const nowNow = formatTime(now)
 
-    const profileFilePath = arguments['--profile'] || 'profile.json'
+    const profilesFilePath = arguments['<profiles>']
 
-    const profileData = fs.readFileSync(profileFilePath)
-    const profile = JSON.parse(profileData)
+    const profilesData = fs.readFileSync(profilesFilePath)
+    const profiles = JSON.parse(profilesData)
 
-    const reasons = arguments['<reasons>']
+    const reasons = arguments['<reasons>'].replace("-", ", ")
     const goingOutDate = arguments['--date'] || todayDate
     const goingOutHour = arguments['--time'] || nowNow
 
-    profile['datesortie'] = goingOutDate
-    profile['heuresortie'] = goingOutHour
+    for (const profile of profiles) {
+      profile['datesortie'] = goingOutDate
+      profile['heuresortie'] = goingOutHour
 
-    const defaultOutputPath = `certificate-${profile['lastname']}-${goingOutHour}-${reasons}.pdf`
-    const outputPath = arguments['--output'] || defaultOutputPath
+      const defaultOutputFilename = `certificate-${profile['lastname']}-${goingOutHour}-${reasons}.pdf`
+      const outputPath = path.join(arguments['--output'], defaultOutputFilename) || defaultOutputFilename
 
-    const existingPdfBytes = fs.readFileSync(attestationInputPath)
-    const pdfBytes = fs.readFileSync(attestationInputPath)
-    const pdfBlob = await generatePdf(existingPdfBytes, profile, reasons)
-    fs.writeFileSync(outputPath, pdfBlob)
+      const pdfBlob = await generatePdf(profile, reasons, attestationInputPath)
+      fs.writeFileSync(outputPath, pdfBlob)
 
-    console.log(`The certificate is ready: ${outputPath}`)
+      console.log(`The certificate is ready: ${outputPath}`)
+
+      if(profile['email']){
+        const transporter = nodemailer.createTransport(config.get("Email"));
+        const message = {
+          from: config.get("Email.auth.user"),
+          to: profile['email'],
+          subject: 'COVID-19 - Déclaration de déplacement',
+          text: 'Attestation de déplacement dérogatoire',
+          attachments: [
+            {
+              path: outputPath,
+              contentType: 'application/pdf'
+            }
+          ]
+        };
+        await transporter.sendMail(message, function (error, info) {
+          if (error) {
+            console.log(`Error: ${error}`);
+          } else {
+            console.log(`The certificate ${outputPath} was send to ${profile['email']}: ${info.response}`)
+          }
+        });
+      }
+    }
   } catch (err) {
     console.error('Error', err)
   }

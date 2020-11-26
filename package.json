@@ -8,7 +8,9 @@
     "url": "git+https://github.com/jad-darrous/covid19-certificate-generator.git"
   },
   "dependencies": {
+    "config": "^3.3.2",
     "docopt": "^0.6.2",
+    "nodemailer": "^6.4.14",
     "npm": "^6.14.4",
     "pdf-lib": "^1.4.1",
     "qrcode": "^1.4.4"
